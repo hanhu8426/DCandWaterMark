@@ -90,18 +90,28 @@ class ConvNet(nn.Module):
             im_size = (32, 32)
         shape_feat = [in_channels, im_size[0], im_size[1]]
         
+        # For 64x64 input, use a different initial conv layer
         if im_size[0] == 64:
-            layers += [nn.Conv2d(in_channels, net_width, kernel_size=7, stride=2, padding=3)]
-            shape_feat[1] //= 2
-            shape_feat[2] //= 2
+            layers += [
+                nn.Conv2d(in_channels, net_width, kernel_size=3, stride=1, padding=1),
+                self._get_activation(net_act)
+            ]
+            if net_pooling != 'none':
+                layers += [self._get_pooling(net_pooling)]
+                shape_feat[1] //= 2
+                shape_feat[2] //= 2
         else:
-            layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=3 if channel == 1 and d == 0 else 1)]
+            layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=3 if channel == 1 else 1)]
         
         shape_feat[0] = net_width
         if net_norm != 'none':
             layers += [self._get_normlayer(net_norm, shape_feat)]
-        layers += [self._get_activation(net_act)]
+        if im_size[0] != 64:  # Don't add activation again for 64x64 case
+            layers += [self._get_activation(net_act)]
         in_channels = net_width
+        
+        # Reduce pooling for 64x64 input to avoid excessive downsampling
+        max_pools = 3 if im_size[0] == 64 else net_depth - 1
         
         for d in range(net_depth-1):
             layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=1)]
@@ -110,7 +120,7 @@ class ConvNet(nn.Module):
                 layers += [self._get_normlayer(net_norm, shape_feat)]
             layers += [self._get_activation(net_act)]
             in_channels = net_width
-            if net_pooling != 'none':
+            if net_pooling != 'none' and d < max_pools:
                 layers += [self._get_pooling(net_pooling)]
                 shape_feat[1] //= 2
                 shape_feat[2] //= 2
