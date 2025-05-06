@@ -30,9 +30,7 @@ class ConvNet(nn.Module):
         self.features, shape_feat = self._make_layers(channel, net_width, net_depth, net_norm, net_act, net_pooling, im_size)
         num_feat = shape_feat[0]*shape_feat[1]*shape_feat[2]
         self.classifier = nn.Sequential(
-            nn.Linear(num_feat, 2048),
-            nn.ReLU(inplace=True),
-            nn.Linear(2048, 1024),
+            nn.Linear(num_feat, 1024),
             nn.ReLU(inplace=True),
             nn.Linear(1024, num_classes),
         )
@@ -90,40 +88,71 @@ class ConvNet(nn.Module):
             im_size = (32, 32)
         shape_feat = [in_channels, im_size[0], im_size[1]]
         
-        # For 64x64 input, use a different initial conv layer
+        # For 64x64 input, use a different architecture
         if im_size[0] == 64:
+            # First conv block
             layers += [
                 nn.Conv2d(in_channels, net_width, kernel_size=3, stride=1, padding=1),
                 self._get_activation(net_act)
             ]
+            if net_norm != 'none':
+                layers += [self._get_normlayer(net_norm, [net_width, im_size[0], im_size[1]])]
+            
+            # First pooling
             if net_pooling != 'none':
                 layers += [self._get_pooling(net_pooling)]
                 shape_feat[1] //= 2
                 shape_feat[2] //= 2
+            
+            # Second conv block
+            layers += [
+                nn.Conv2d(net_width, net_width*2, kernel_size=3, stride=1, padding=1),
+                self._get_activation(net_act)
+            ]
+            if net_norm != 'none':
+                layers += [self._get_normlayer(net_norm, [net_width*2, shape_feat[1], shape_feat[2]])]
+            
+            # Second pooling
+            if net_pooling != 'none':
+                layers += [self._get_pooling(net_pooling)]
+                shape_feat[1] //= 2
+                shape_feat[2] //= 2
+            
+            # Third conv block
+            layers += [
+                nn.Conv2d(net_width*2, net_width*4, kernel_size=3, stride=1, padding=1),
+                self._get_activation(net_act)
+            ]
+            if net_norm != 'none':
+                layers += [self._get_normlayer(net_norm, [net_width*4, shape_feat[1], shape_feat[2]])]
+            
+            # Final pooling
+            if net_pooling != 'none':
+                layers += [self._get_pooling(net_pooling)]
+                shape_feat[1] //= 2
+                shape_feat[2] //= 2
+            
+            shape_feat[0] = net_width*4
         else:
+            # Original architecture for 32x32 input
             layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=3 if channel == 1 else 1)]
-        
-        shape_feat[0] = net_width
-        if net_norm != 'none':
-            layers += [self._get_normlayer(net_norm, shape_feat)]
-        if im_size[0] != 64:  # Don't add activation again for 64x64 case
-            layers += [self._get_activation(net_act)]
-        in_channels = net_width
-        
-        # Reduce pooling for 64x64 input to avoid excessive downsampling
-        max_pools = 2 if im_size[0] == 64 else net_depth - 1
-        
-        for d in range(net_depth-1):
-            layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=1)]
             shape_feat[0] = net_width
             if net_norm != 'none':
                 layers += [self._get_normlayer(net_norm, shape_feat)]
             layers += [self._get_activation(net_act)]
             in_channels = net_width
-            if net_pooling != 'none' and d < max_pools:
-                layers += [self._get_pooling(net_pooling)]
-                shape_feat[1] //= 2
-                shape_feat[2] //= 2
+            
+            for d in range(net_depth-1):
+                layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=1)]
+                shape_feat[0] = net_width
+                if net_norm != 'none':
+                    layers += [self._get_normlayer(net_norm, shape_feat)]
+                layers += [self._get_activation(net_act)]
+                in_channels = net_width
+                if net_pooling != 'none':
+                    layers += [self._get_pooling(net_pooling)]
+                    shape_feat[1] //= 2
+                    shape_feat[2] //= 2
 
         return nn.Sequential(*layers), shape_feat
 
