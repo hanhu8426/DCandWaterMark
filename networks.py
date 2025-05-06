@@ -30,11 +30,11 @@ class ConvNet(nn.Module):
         self.features, shape_feat = self._make_layers(channel, net_width, net_depth, net_norm, net_act, net_pooling, im_size)
         num_feat = shape_feat[0]*shape_feat[1]*shape_feat[2]
         self.classifier = nn.Sequential(
-            nn.Linear(num_feat, 512),
+            nn.Linear(num_feat, 2048),
             nn.ReLU(inplace=True),
-            nn.Linear(512, 256),
+            nn.Linear(2048, 1024),
             nn.ReLU(inplace=True),
-            nn.Linear(256, num_classes),
+            nn.Linear(1024, num_classes),
         )
 
     def forward(self, x):
