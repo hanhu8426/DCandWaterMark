@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 from scipy.ndimage.interpolation import rotate as scipyrotate
-from networks import MLP, ConvNet, LeNet, AlexNet, VGG11BN, VGG11, ResNet18, ResNet18BN_AP
+from networks import MLP, ConvNet, LeNet, AlexNet, VGG11BN, VGG11, ResNet18, ResNet18BN_AP, SimpleResNet18
 from PIL import Image
 from torchvision import datasets, transforms
 from typing import Any, Callable, List, Optional, Union, Tuple, cast, Dict
@@ -101,7 +101,7 @@ def get_dataset(dataset, data_path, args):
 
     elif dataset == 'TinyImageNet':
         channel = 3
-        im_size = (32, 32)  # 调整为 32x32 以匹配 STL10
+        im_size = (64, 64)  # 调整为 32x32 以匹配 STL10
         num_classes = 200 
         mean = [0.485, 0.456, 0.406]  # ImageNet statistics
         std = [0.229, 0.224, 0.225] 
@@ -144,7 +144,7 @@ def get_default_convnet_setting():
 
 
 
-def get_network(model, channel, num_classes, im_size=(32, 32)):
+def get_network(model, channel, num_classes, im_size=(64, 64)):
     torch.random.manual_seed(int(time.time() * 1000) % 100000)
     net_width, net_depth, net_act, net_norm, net_pooling = get_default_convnet_setting()
 
@@ -164,6 +164,8 @@ def get_network(model, channel, num_classes, im_size=(32, 32)):
         net = ResNet18(channel=channel, num_classes=num_classes)
     elif model == 'ResNet18BN_AP':
         net = ResNet18BN_AP(channel=channel, num_classes=num_classes)
+    elif model == 'SimpleResNet':
+        net = SimpleResNet18(num_classes=num_classes)
 
     elif model == 'ConvNetD1':
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=1, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
@@ -1677,8 +1679,6 @@ class TinyImageNet_BADNETS(VisionDataset):
         # Load image
         img = Image.open(img_path).convert('RGB')
         
-        # Resize to 32x32 like STL10
-        img = FF.resize(img, (32,32))
         
         if self.backdoor:
             if index in self.perm:

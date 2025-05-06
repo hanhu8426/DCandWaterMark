@@ -24,7 +24,7 @@ class MLP(nn.Module):
 
 ''' ConvNet '''
 class ConvNet(nn.Module):
-    def __init__(self, channel, num_classes, net_width=128, net_depth=3, net_act='relu', net_norm='none', net_pooling='avgpooling', im_size = (32,32)):
+    def __init__(self, channel, num_classes, net_width=128, net_depth=3, net_act='relu', net_norm='none', net_pooling='avgpooling', im_size = (64,64)):
         super(ConvNet, self).__init__()
 
         self.features, shape_feat = self._make_layers(channel, net_width, net_depth, net_norm, net_act, net_pooling, im_size)
@@ -480,19 +480,18 @@ def ResNet18_AP(channel, num_classes):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, norm='instancenorm'):
+    def __init__(self, in_planes, planes, stride=1):
         super(BasicBlock, self).__init__()
-        self.norm = norm
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.GroupNorm(planes, planes, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(planes)
+        self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.GroupNorm(planes, planes, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(planes)
+        self.bn2 = nn.BatchNorm2d(planes)
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
-                nn.GroupNorm(self.expansion*planes, self.expansion*planes, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(self.expansion*planes)
+                nn.BatchNorm2d(self.expansion*planes)
             )
 
     def forward(self, x):
@@ -506,21 +505,20 @@ class BasicBlock(nn.Module):
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, in_planes, planes, stride=1, norm='instancenorm'):
+    def __init__(self, in_planes, planes, stride=1):
         super(Bottleneck, self).__init__()
-        self.norm = norm
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.GroupNorm(planes, planes, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(planes)
+        self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.GroupNorm(planes, planes, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(planes)
+        self.bn2 = nn.BatchNorm2d(planes)
         self.conv3 = nn.Conv2d(planes, self.expansion*planes, kernel_size=1, bias=False)
-        self.bn3 = nn.GroupNorm(self.expansion*planes, self.expansion*planes, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(self.expansion*planes)
+        self.bn3 = nn.BatchNorm2d(self.expansion*planes)
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
-                nn.GroupNorm(self.expansion*planes, self.expansion*planes, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(self.expansion*planes)
+                nn.BatchNorm2d(self.expansion*planes)
             )
 
     def forward(self, x):
@@ -532,84 +530,46 @@ class Bottleneck(nn.Module):
         return out
 
 
-class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, channel=3, num_classes=10, norm='instancenorm'):
-        super(ResNet, self).__init__()
+class SimpleResNet(nn.Module):
+    def __init__(self, block, num_blocks, num_classes=200):
+        super(SimpleResNet, self).__init__()
         self.in_planes = 64
-        self.norm = norm
 
-        self.conv1 = nn.Conv2d(channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = self._get_normlayer(64)
-        self.act = self._get_activation('relu')
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
+        # Initial convolution layer
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        
+        # Residual blocks
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         
+        # Final layers
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.classifier = nn.Sequential(
-            nn.Linear(512 * block.expansion, 1024),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(1024, num_classes)
-        )
-
-    def _get_normlayer(self, num_features):
-        if self.norm == 'instancenorm':
-            return nn.GroupNorm(num_features, num_features, affine=True)
-        elif self.norm == 'batchnorm':
-            return nn.BatchNorm2d(num_features)
-        else:
-            return None
-
-    def _get_activation(self, net_act):
-        if net_act == 'relu':
-            return nn.ReLU(inplace=True)
-        else:
-            return None
+        self.linear = nn.Linear(512 * block.expansion, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, stride, self.norm))
+            layers.append(block(self.in_planes, planes, stride))
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.act(out)
-        out = self.maxpool(out)
-
+        out = F.relu(self.bn1(self.conv1(x)))
+        
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
         out = self.layer4(out)
-
+        
         out = self.avgpool(out)
         out = out.view(out.size(0), -1)
-        out = self.classifier(out)
+        out = self.linear(out)
         return out
 
-
-def ResNet18BN(channel, num_classes):
-    return ResNet(BasicBlock, [2,2,2,2], channel=channel, num_classes=num_classes, norm='batchnorm')
-
-def ResNet18(channel, num_classes):
-    return ResNet(BasicBlock, [2,2,2,2], channel=channel, num_classes=num_classes)
-
-def ResNet34(channel, num_classes):
-    return ResNet(BasicBlock, [3,4,6,3], channel=channel, num_classes=num_classes)
-
-def ResNet50(channel, num_classes):
-    return ResNet(Bottleneck, [3,4,6,3], channel=channel, num_classes=num_classes)
-
-def ResNet101(channel, num_classes):
-    return ResNet(Bottleneck, [3,4,23,3], channel=channel, num_classes=num_classes)
-
-def ResNet152(channel, num_classes):
-    return ResNet(Bottleneck, [3,8,36,3], channel=channel, num_classes=num_classes)
+def SimpleResNet18(num_classes=200):
+    return SimpleResNet(BasicBlock, [2,2,2,2], num_classes=num_classes)
 
