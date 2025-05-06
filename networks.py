@@ -30,9 +30,7 @@ class ConvNet(nn.Module):
         self.features, shape_feat = self._make_layers(channel, net_width, net_depth, net_norm, net_act, net_pooling, im_size)
         num_feat = shape_feat[0]*shape_feat[1]*shape_feat[2]
         self.classifier = nn.Sequential(
-            nn.Linear(num_feat, 384),
-            nn.ReLU(inplace=True),
-            nn.Linear(384, 192),
+            nn.Linear(num_feat, 192),
             nn.ReLU(inplace=True),
             nn.Linear(192, num_classes),
         )
@@ -89,72 +87,17 @@ class ConvNet(nn.Module):
         if im_size[0] == 28:
             im_size = (32, 32)
         shape_feat = [in_channels, im_size[0], im_size[1]]
-        
-        # Initial conv layer with larger kernel for bigger images
-        if im_size[0] >= 64:
-            # First conv block with larger kernel
-            layers += [
-                nn.Conv2d(in_channels, net_width, kernel_size=5, stride=1, padding=2),
-                self._get_activation(net_act)
-            ]
-            if net_norm != 'none':
-                layers += [self._get_normlayer(net_norm, [net_width, im_size[0], im_size[1]])]
-            
-            # First pooling
-            if net_pooling != 'none':
-                layers += [self._get_pooling(net_pooling)]
-                shape_feat[1] //= 2
-                shape_feat[2] //= 2
-            
-            # Second conv block
-            layers += [
-                nn.Conv2d(net_width, net_width*2, kernel_size=3, stride=1, padding=1),
-                self._get_activation(net_act)
-            ]
-            if net_norm != 'none':
-                layers += [self._get_normlayer(net_norm, [net_width*2, shape_feat[1], shape_feat[2]])]
-            
-            # Second pooling
-            if net_pooling != 'none':
-                layers += [self._get_pooling(net_pooling)]
-                shape_feat[1] //= 2
-                shape_feat[2] //= 2
-            
-            # Third conv block
-            layers += [
-                nn.Conv2d(net_width*2, net_width*4, kernel_size=3, stride=1, padding=1),
-                self._get_activation(net_act)
-            ]
-            if net_norm != 'none':
-                layers += [self._get_normlayer(net_norm, [net_width*4, shape_feat[1], shape_feat[2]])]
-            
-            # Final pooling
-            if net_pooling != 'none':
-                layers += [self._get_pooling(net_pooling)]
-                shape_feat[1] //= 2
-                shape_feat[2] //= 2
-            
-            shape_feat[0] = net_width*4
-        else:
-            # Original architecture for smaller images
-            layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=3 if channel == 1 else 1)]
+        for d in range(net_depth):
+            layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=3 if channel == 1 and d == 0 else 1)]
             shape_feat[0] = net_width
             if net_norm != 'none':
                 layers += [self._get_normlayer(net_norm, shape_feat)]
             layers += [self._get_activation(net_act)]
             in_channels = net_width
-            
-            for d in range(net_depth-1):
-                layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=1)]
-                shape_feat[0] = net_width
-                if net_norm != 'none':
-                    layers += [self._get_normlayer(net_norm, shape_feat)]
-                layers += [self._get_activation(net_act)]
-                in_channels = net_width
-                if net_pooling != 'none':
-                    layers += [self._get_pooling(net_pooling)]
-                    shape_feat[1] //= 2
-                    shape_feat[2] //= 2
+            if net_pooling != 'none':
+                layers += [self._get_pooling(net_pooling)]
+                shape_feat[1] //= 2
+                shape_feat[2] //= 2
 
         return nn.Sequential(*layers), shape_feat
 
@@ -535,8 +478,8 @@ class SimpleResNet(nn.Module):
         super(SimpleResNet, self).__init__()
         self.in_planes = 64
 
-        # Initial convolution layer
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        # Initial convolution layer with stride 2 to reduce spatial dimensions
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         
         # Residual blocks
@@ -558,6 +501,7 @@ class SimpleResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        # Initial conv reduces spatial dimensions from 64x64 to 32x32
         out = F.relu(self.bn1(self.conv1(x)))
         
         out = self.layer1(out)

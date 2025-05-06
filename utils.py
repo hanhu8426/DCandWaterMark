@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 from scipy.ndimage.interpolation import rotate as scipyrotate
-from networks import MLP, ConvNet, LeNet, AlexNet, VGG11BN, VGG11, ResNet18, ResNet18BN_AP, SimpleResNet18
+from networks import MLP, ConvNet, LeNet, AlexNet, VGG11BN, VGG11, ResNet18BN_AP, SimpleResNet18
 from PIL import Image
 from torchvision import datasets, transforms
 from typing import Any, Callable, List, Optional, Union, Tuple, cast, Dict
