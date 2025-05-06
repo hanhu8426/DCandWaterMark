@@ -30,7 +30,9 @@ class ConvNet(nn.Module):
         self.features, shape_feat = self._make_layers(channel, net_width, net_depth, net_norm, net_act, net_pooling, im_size)
         num_feat = shape_feat[0]*shape_feat[1]*shape_feat[2]
         self.classifier = nn.Sequential(
-            nn.Linear(num_feat, 192),
+            nn.Linear(num_feat, 384),
+            nn.ReLU(inplace=True),
+            nn.Linear(384, 192),
             nn.ReLU(inplace=True),
             nn.Linear(192, num_classes),
         )
@@ -87,8 +89,22 @@ class ConvNet(nn.Module):
         if im_size[0] == 28:
             im_size = (32, 32)
         shape_feat = [in_channels, im_size[0], im_size[1]]
-        for d in range(net_depth):
+        
+        if im_size[0] == 64:
+            layers += [nn.Conv2d(in_channels, net_width, kernel_size=7, stride=2, padding=3)]
+            shape_feat[1] //= 2
+            shape_feat[2] //= 2
+        else:
             layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=3 if channel == 1 and d == 0 else 1)]
+        
+        shape_feat[0] = net_width
+        if net_norm != 'none':
+            layers += [self._get_normlayer(net_norm, shape_feat)]
+        layers += [self._get_activation(net_act)]
+        in_channels = net_width
+        
+        for d in range(net_depth-1):
+            layers += [nn.Conv2d(in_channels, net_width, kernel_size=3, padding=1)]
             shape_feat[0] = net_width
             if net_norm != 'none':
                 layers += [self._get_normlayer(net_norm, shape_feat)]
@@ -481,16 +497,37 @@ class ResNet(nn.Module):
         self.in_planes = 64
         self.norm = norm
 
-        self.conv1 = nn.Conv2d(channel, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.GroupNorm(64, 64, affine=True) if self.norm == 'instancenorm' else nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = self._get_normlayer(64)
+        self.act = self._get_activation('relu')
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
+        
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.classifier = nn.Sequential(
-            nn.Linear(512*block.expansion, 512*block.expansion),
-            nn.Linear(512*block.expansion, num_classes)
-            )
+            nn.Linear(512 * block.expansion, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(1024, num_classes)
+        )
+
+    def _get_normlayer(self, num_features):
+        if self.norm == 'instancenorm':
+            return nn.GroupNorm(num_features, num_features, affine=True)
+        elif self.norm == 'batchnorm':
+            return nn.BatchNorm2d(num_features)
+        else:
+            return None
+
+    def _get_activation(self, net_act):
+        if net_act == 'relu':
+            return nn.ReLU(inplace=True)
+        else:
+            return None
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -501,12 +538,17 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.act(out)
+        out = self.maxpool(out)
+
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
         out = self.layer4(out)
-        out = F.avg_pool2d(out, 4)
+
+        out = self.avgpool(out)
         out = out.view(out.size(0), -1)
         out = self.classifier(out)
         return out

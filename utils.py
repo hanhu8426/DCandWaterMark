@@ -101,7 +101,7 @@ def get_dataset(dataset, data_path, args):
 
     elif dataset == 'TinyImageNet':
         channel = 3
-        im_size = (64, 64)  # TinyImageNet images are 64x64
+        im_size = (64, 64)  # 改回原始大小 64x64
         num_classes = 200 
         mean = [0.485, 0.456, 0.406]  # ImageNet statistics
         std = [0.229, 0.224, 0.225] 
@@ -1632,7 +1632,7 @@ class TinyImageNet_BADNETS(VisionDataset):
                 wnid_to_words[wnid] = words.split(',')[0].strip()
         
         self.classes = [wnid_to_words[wnid] for wnid in self.wnids]
-        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
+        self.class_to_idx = {wnid: idx for idx, wnid in enumerate(self.wnids)}  # Changed to use wnid as key
         
         # Load image paths and labels
         self.data = []
