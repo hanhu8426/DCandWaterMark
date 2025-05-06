@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--backdoor_size', type=int, default=2)
     parser.add_argument('--support_dataset', default=None, type=str)
     parser.add_argument('--trigger_label', type=int, default=0)
-    parser.add_argument('--device_id', type=str, default="0", help='device id, -1 is cpu')
+    parser.add_argument('--device_id', type=str, default="3", help='device id, -1 is cpu')
     parser.add_argument('--model_init', type=str, default="imagenet-pretrained")
     parser.add_argument('--invisible', action='store_true')
     parser.add_argument('--topk', type=int, default=1)
