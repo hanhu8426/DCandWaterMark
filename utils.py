@@ -101,7 +101,7 @@ def get_dataset(dataset, data_path, args):
 
     elif dataset == 'TinyImageNet':
         channel = 3
-        im_size = (64, 64)  # 改回原始大小 64x64
+        im_size = (32, 32)  # 调整为 32x32 以匹配 STL10
         num_classes = 200 
         mean = [0.485, 0.456, 0.406]  # ImageNet statistics
         std = [0.229, 0.224, 0.225] 
@@ -1676,6 +1676,9 @@ class TinyImageNet_BADNETS(VisionDataset):
         
         # Load image
         img = Image.open(img_path).convert('RGB')
+        
+        # Resize to 32x32 like STL10
+        img = FF.resize(img, (32,32))
         
         if self.backdoor:
             if index in self.perm:
